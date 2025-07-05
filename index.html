@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ice Crusher</title>
+    
+    <!-- Leaflet Map Library -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Plotly.js for Choropleth Map -->
+    <script src="https://cdn.plot.ly/plotly-2.29.1.min.js" charset="utf-8"></script>
+
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        #submission-map, #choropleth-map {
+            height: 100%;
+            width: 100%;
+            cursor: grab;
+        }
+        .leaflet-container.crosshair-cursor {
+            cursor: crosshair !important;
+        }
+        .resource-link {
+            display: block; padding: 8px; background-color: #f3f4f6;
+            border-radius: 5px; font-weight: 500; color: #1d4ed8; text-decoration: none;
+        }
+        .resource-link:hover { background-color: #e5e7eb; }
+        .tab-button {
+            padding: 10px 15px; border-radius: 8px; font-weight: 500;
+            cursor: pointer; transition: background-color 0.2s;
+        }
+        .tab-button.active { background-color: #3b82f6; color: white; }
+        .tab-button:not(.active) { background-color: #e5e7eb; color: #374151; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="flex flex-col md:flex-row h-screen">
+        <!-- Sidebar -->
+        <div class="w-full md:w-1/3 lg:w-1/4 p-6 bg-white shadow-lg overflow-y-auto">
+            <div class="text-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Ice Crusher</h1>
+                <p class="text-gray-500">Anonymous Incident Reporting</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex space-x-2 mb-4">
+                <button id="tab-dashboard" class="tab-button active">Dashboard</button>
+                <button id="tab-submit" class="tab-button">Submit</button>
+                <button id="tab-data" class="tab-button">Data</button>
+            </div>
+
+            <!-- Tab Content: Dashboard -->
+            <div id="content-dashboard" class="tab-content active">
+                <h2 class="text-xl font-bold text-gray-800 mb-2">National Overview</h2>
+                <p class="text-sm text-gray-600 mb-4">This map shows the density of reports by state over the last 24 hours. Darker states have more reports.</p>
+                <div id="report-summary" class="text-sm text-gray-600 space-y-2">
+                    <p>Loading reports...</p>
+                </div>
+            </div>
+
+            <!-- Tab Content: Submit Report -->
+            <div id="content-submit" class="tab-content">
+                <div class="space-y-4">
+                    <button id="enter-pin-mode" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors shadow-md">
+                        1. Place New Pin
+                    </button>
+                    <div id="pin-mode-text" class="text-center text-blue-600 font-semibold hidden">
+                        Click on the map to place your pin.
+                    </div>
+                    <div id="captcha-container" class="bg-gray-50 p-4 rounded-lg">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="captcha" class="h-5 w-5 rounded text-blue-600 focus:ring-blue-500">
+                            <span class="ml-3 text-gray-700 font-medium">I am not a robot</span>
+                        </label>
+                    </div>
+                    <button id="submit-report" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition-colors shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                        2. Submit Report
+                    </button>
+                </div>
+                <div id="feedback-message" class="mt-4 text-center"></div>
+                <div id="contextual-info" class="hidden mt-4 space-y-4">
+                    <hr><h3 class="text-lg font-bold text-gray-800 mb-2">Statistics for this Area</h3>
+                    <div id="contextual-stats" class="text-sm text-gray-600 space-y-2 p-2 bg-gray-50 rounded-lg"></div>
+                    <hr><h3 class="text-lg font-bold text-gray-800 mb-2">Local Resources</h3>
+                    <div id="local-resources" class="text-sm space-y-2"></div>
+                </div>
+            </div>
+
+            <!-- Tab Content: Data Explorer -->
+            <div id="content-data" class="tab-content">
+                 <h2 class="text-xl font-bold text-gray-800 mb-2">Data Explorer</h2>
+                 <p class="text-sm text-gray-600 mb-4">View and download all submitted reports.</p>
+                 <button id="download-reports" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors text-sm mt-3">
+                    Download as TSV
+                 </button>
+                 <div class="mt-4 h-96 overflow-y-auto border rounded-lg">
+                    <table id="data-table" class="w-full text-sm text-left">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="p-2 font-semibold">Timestamp</th>
+                                <th class="p-2 font-semibold">State</th>
+                                <th class="p-2 font-semibold">County</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                 </div>
+            </div>
+            
+            <hr class="my-6">
+            <!-- Admin Section -->
+            <div id="admin-section" class="hidden">
+                <h2 class="text-xl font-bold text-gray-800 mb-2">Admin Panel</h2>
+                <button id="clear-db" class="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors text-sm">
+                    Clear All Reports
+                </button>
+                <button id="admin-logout" class="w-full bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors text-sm mt-4">
+                    Logout
+                </button>
+            </div>
+            <div id="admin-login-container">
+                <button id="admin-login" class="w-full text-sm text-blue-600 hover:underline mt-4">Admin Login</button>
+            </div>
+        </div>
+
+        <!-- Map Area -->
+        <div class="flex-grow h-full w-full relative">
+             <div id="map-container" class="h-full">
+                <div id="choropleth-map" class="h-full w-full"></div>
+                <div id="submission-map" class="h-full w-full hidden"></div>
+             </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase SDK Imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, query, where, Timestamp, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- 1. CONFIGURATION & INITIALIZATION ---
+        
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyD0nO8RmbAC6UouvsnyEZKEIKLFP6lBhrc",
+            authDomain: "sightings-b5d54.firebaseapp.com",
+            projectId: "sightings-b5d54",
+            storageBucket: "sightings-b5d54.firebasestorage.app",
+            messagingSenderId: "261890494123",
+            appId: "1:261890494123:web:d267d9258cbea2336fb1ee",
+            measurementId: "G-4ZPR0T6ZY8"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const usBounds = L.latLngBounds(L.latLng(18, -161), L.latLng(50, -66));
+        const ADMIN_PASSWORD = "FAFO12!";
+
+        // State variables
+        let submissionMap, choroplethPlot;
+        let tempPin = null;
+        let tempPinCoords = null;
+        let isPinMode = false;
+        let isAdmin = false;
+        let reportsCollection;
+        let allReportsCache = []; // Cache for all reports
+
+        // DOM Elements
+        const enterPinModeBtn = document.getElementById('enter-pin-mode');
+        const pinModeText = document.getElementById('pin-mode-text');
+        const captchaCheckbox = document.getElementById('captcha');
+        const captchaContainer = document.getElementById('captcha-container');
+        const submitBtn = document.getElementById('submit-report');
+        const feedbackDiv = document.getElementById('feedback-message');
+        const summaryDiv = document.getElementById('report-summary');
+        const clearDbBtn = document.getElementById('clear-db');
+        const contextualInfoDiv = document.getElementById('contextual-info');
+        const contextualStatsDiv = document.getElementById('contextual-stats');
+        const localResourcesDiv = document.getElementById('local-resources');
+        const adminSection = document.getElementById('admin-section');
+        const adminLoginContainer = document.getElementById('admin-login-container');
+        const adminLoginBtn = document.getElementById('admin-login');
+        const adminLogoutBtn = document.getElementById('admin-logout');
+        const downloadReportsBtn = document.getElementById('download-reports');
+        const dataTableBody = document.querySelector('#data-table tbody');
+        
+        const tabs = {
+            dashboard: { btn: document.getElementById('tab-dashboard'), content: document.getElementById('content-dashboard'), map: document.getElementById('choropleth-map') },
+            submit: { btn: document.getElementById('tab-submit'), content: document.getElementById('content-submit'), map: document.getElementById('submission-map') },
+            data: { btn: document.getElementById('tab-data'), content: document.getElementById('content-data'), map: null }
+        };
+
+        // --- 2. CORE FUNCTIONS ---
+        function initializeSubmissionMap() {
+            submissionMap = L.map('submission-map').setView([39.82, -98.58], 4);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            }).addTo(submissionMap);
+            submissionMap.on('click', onMapClick);
+        }
+
+        function drawChoroplethMap() {
+            const twentyFourHoursAgo = new Date().getTime() - (24 * 60 * 60 * 1000);
+            const recentReports = allReportsCache.filter(report => report.timestamp.toDate().getTime() >= twentyFourHoursAgo);
+
+            const stateCounts = recentReports.reduce((acc, report) => {
+                if (report.state !== 'N/A') {
+                    acc[report.state] = (acc[report.state] || 0) + 1;
+                }
+                return acc;
+            }, {});
+
+            const data = [{
+                type: 'choropleth',
+                locationmode: 'USA-states',
+                locations: Object.keys(stateCounts),
+                z: Object.values(stateCounts),
+                zmin: 0,
+                zmax: Math.max(10, ...Object.values(stateCounts)),
+                colorscale: 'Blues',
+                colorbar: { title: 'Reports' },
+                marker: { line: { color: 'rgb(255,255,255)', width: 2 } }
+            }];
+
+            const layout = {
+                title: '24-Hour Report Density by State',
+                geo: {
+                    scope: 'usa',
+                    projection: { type: 'albers usa' },
+                    showlakes: true,
+                    lakecolor: 'rgb(255, 255, 255)'
+                }
+            };
+
+            Plotly.newPlot('choropleth-map', data, layout, {responsive: true});
+            updateReportSummary(recentReports);
+        }
+
+        function updateDataTable() {
+            const sortedReports = [...allReportsCache].sort((a,b) => b.timestamp.toDate() - a.timestamp.toDate());
+            dataTableBody.innerHTML = '';
+            if (sortedReports.length === 0) {
+                dataTableBody.innerHTML = '<tr><td colspan="3" class="text-center p-4">No reports found.</td></tr>';
+                return;
+            }
+            sortedReports.forEach(report => {
+                const row = `<tr>
+                    <td class="p-2">${report.timestamp.toDate().toLocaleString()}</td>
+                    <td class="p-2">${report.state}</td>
+                    <td class="p-2">${report.county}</td>
+                </tr>`;
+                dataTableBody.innerHTML += row;
+            });
+        }
+
+        function updateReportSummary(reports) {
+            if (reports.length === 0) {
+                summaryDiv.innerHTML = `<p>No reports in this timeframe.</p>`;
+                return;
+            }
+            const summary = reports.reduce((acc, report) => {
+                const key = `${report.state}, ${report.county}`;
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+            }, {});
+            const sortedSummary = Object.entries(summary).sort();
+            let tableHTML = '<table class="w-full text-left"><thead><tr><th class="font-bold">Location</th><th class="font-bold text-right">Count</th></tr></thead><tbody>';
+            sortedSummary.forEach(([location, count]) => {
+                tableHTML += `<tr><td>${location}</td><td class="text-right">${count}</td></tr>`;
+            });
+            tableHTML += '</tbody></table>';
+            summaryDiv.innerHTML = tableHTML;
+        }
+
+        async function reverseGeocode(lat, lng) {
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=en`);
+                if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
+                const data = await response.json();
+                if (data.error) return { state: 'N/A', county: 'N/A', country_code: null };
+                return {
+                    state: data.address.state || 'N/A',
+                    county: data.address.county || 'N/A',
+                    country_code: data.address.country_code || null
+                };
+            } catch (error) {
+                console.error("Reverse geocoding failed:", error);
+                throw error;
+            }
+        }
+        
+        function showFeedback(text, isError = false) {
+            feedbackDiv.textContent = text;
+            feedbackDiv.className = `mt-4 text-center p-2 rounded-lg ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
+        }
+        
+        async function updateContextualInfo(lat, lng, locationInfo) {
+            contextualInfoDiv.classList.remove('hidden');
+            contextualStatsDiv.innerHTML = "<p>Loading statistics...</p>";
+            localResourcesDiv.innerHTML = "<p>Finding local resources...</p>";
+
+            const twentyFourHoursAgo = new Date().getTime() - (24 * 60 * 60 * 1000);
+            const recentReports = allReportsCache.filter(report => report.timestamp.toDate().getTime() >= twentyFourHoursAgo);
+
+            const countyCount = recentReports.filter(r => r.county === locationInfo.county && r.state === locationInfo.state).length;
+            const stateCount = recentReports.filter(r => r.state === locationInfo.state).length;
+
+            contextualStatsDiv.innerHTML = `<div class="space-y-2"><div><span class="font-semibold text-gray-700">In ${locationInfo.state}:</span><p class="ml-2 text-gray-600">${stateCount} reports (24h)</p></div><div><span class="font-semibold text-gray-700">In ${locationInfo.county}:</span><p class="ml-2 text-gray-600">${countyCount} reports (24h)</p></div></div>`;
+            localResourcesDiv.innerHTML = `<a href="https://www.google.com/maps/search/immigration+lawyer/@${lat},${lng},12z" target="_blank" class="resource-link">Search on Google Maps</a><a href="https://duckduckgo.com/?q=immigration+lawyer+near+${encodeURIComponent(locationInfo.county)}+${encodeURIComponent(locationInfo.state)}" target="_blank" class="resource-link">Search on DuckDuckGo</a>`;
+        }
+
+        // --- 4. EVENT HANDLERS ---
+        function onMapClick(e) {
+            if (!isPinMode) return;
+            if (!usBounds.contains(e.latlng)) {
+                showFeedback("Please place your pin within the United States.", true);
+                return;
+            }
+            if (tempPin) submissionMap.removeLayer(tempPin);
+            
+            const blueIcon = L.icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+            });
+            tempPinCoords = e.latlng;
+            tempPin = L.marker(e.latlng, { icon: blueIcon }).addTo(submissionMap).bindPopup('Your new report location.');
+            
+            isPinMode = false;
+            document.getElementById('submission-map').classList.remove('crosshair-cursor');
+            pinModeText.classList.add('hidden');
+            updateSubmitButtonState();
+        }
+
+        function updateSubmitButtonState() {
+            if (isAdmin) {
+                submitBtn.disabled = !tempPinCoords;
+            } else {
+                submitBtn.disabled = !(tempPinCoords && captchaCheckbox.checked);
+            }
+        }
+        
+        function toggleAdminView(loggedIn) {
+            isAdmin = loggedIn;
+            adminSection.classList.toggle('hidden', !loggedIn);
+            adminLoginContainer.classList.toggle('hidden', loggedIn);
+            if (document.querySelector('.tab-button.active').id !== 'tab-submit') {
+                 captchaContainer.classList.add('hidden');
+            } else {
+                 captchaContainer.classList.toggle('hidden', loggedIn);
+            }
+            updateSubmitButtonState();
+        }
+        
+        function switchTab(tabKey) {
+            Object.keys(tabs).forEach(key => {
+                const is_active = key === tabKey;
+                tabs[key].btn.classList.toggle('active', is_active);
+                tabs[key].content.classList.toggle('active', is_active);
+                if(tabs[key].map) tabs[key].map.classList.toggle('hidden', !is_active);
+            });
+            
+            captchaContainer.classList.toggle('hidden', tabKey !== 'submit' || isAdmin);
+
+            if (tabKey === 'dashboard') drawChoroplethMap();
+            if (tabKey === 'submit') submissionMap.invalidateSize();
+            if (tabKey === 'data') updateDataTable();
+        }
+
+        // --- 5. EVENT LISTENERS ---
+        Object.keys(tabs).forEach(key => {
+            tabs[key].btn.addEventListener('click', () => switchTab(key));
+        });
+        
+        enterPinModeBtn.addEventListener('click', () => {
+            isPinMode = true;
+            document.getElementById('submission-map').classList.add('crosshair-cursor');
+            pinModeText.classList.remove('hidden');
+            contextualInfoDiv.classList.add('hidden');
+            showFeedback('');
+        });
+
+        captchaCheckbox.addEventListener('change', updateSubmitButtonState);
+
+        submitBtn.addEventListener('click', async () => {
+            if (submitBtn.disabled) return;
+            
+            showFeedback('Submitting report...', false);
+            submitBtn.disabled = true;
+
+            const { lat, lng } = tempPinCoords;
+            let locationInfo;
+            try {
+                locationInfo = await reverseGeocode(lat, lng);
+            } catch (error) {
+                locationInfo = { state: 'N/A', county: 'N/A', country_code: 'us' };
+            }
+
+            if (locationInfo.country_code !== 'us') {
+                showFeedback("Reports can only be made within the United States.", true);
+                submitBtn.disabled = false;
+                return;
+            }
+            
+            try {
+                await addDoc(reportsCollection, {
+                    latitude: lat,
+                    longitude: lng,
+                    state: locationInfo.state,
+                    county: locationInfo.county,
+                    timestamp: Timestamp.now()
+                });
+
+                showFeedback('Report submitted successfully!', false);
+                if (tempPin) {
+                    submissionMap.removeLayer(tempPin);
+                    tempPin = null;
+                    tempPinCoords = null;
+                }
+                updateSubmitButtonState();
+                await updateContextualInfo(lat, lng, locationInfo);
+
+            } catch(error) {
+                console.error("Error submitting to Firestore:", error);
+                showFeedback("Submission failed. Please try again.", true);
+                updateSubmitButtonState();
+            }
+        });
+
+        clearDbBtn.addEventListener('click', async () => {
+            if (!confirm("Are you sure you want to delete ALL reports? This cannot be undone.")) return;
+            
+            const querySnapshot = await getDocs(reportsCollection);
+            const batch = writeBatch(db);
+            querySnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+
+            showFeedback('All reports have been deleted.', false);
+            contextualInfoDiv.classList.add('hidden');
+        });
+
+        adminLoginBtn.addEventListener('click', () => {
+            const pass = prompt("Enter admin password:");
+            if (pass === ADMIN_PASSWORD) {
+                toggleAdminView(true);
+                showFeedback("Admin login successful.", false);
+            } else if (pass) {
+                alert("Incorrect password.");
+            }
+        });
+
+        adminLogoutBtn.addEventListener('click', () => {
+            toggleAdminView(false);
+            showFeedback("Logged out.", false);
+        });
+        
+        downloadReportsBtn.addEventListener('click', () => {
+            if (allReportsCache.length === 0) {
+                alert("No reports to download.");
+                return;
+            }
+            const header = "Timestamp\tLatitude\tLongitude\tState\tCounty\n";
+            const tsvRows = allReportsCache.map(r => `${r.timestamp.toDate().toISOString()}\t${r.latitude}\t${r.longitude}\t${r.state}\t${r.county}`);
+            const tsvString = header + tsvRows.join("\n");
+            const blob = new Blob([tsvString], { type: 'text/tab-separated-values;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `ice_crusher_reports.tsv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        // --- 6. START APPLICATION ---
+        async function main() {
+            try {
+                await signInAnonymously(auth);
+                console.log("Firebase auth successful.");
+                
+                const appId = firebaseConfig.appId;
+                reportsCollection = collection(db, `artifacts/${appId}/public/data/reports`);
+
+                initializeSubmissionMap();
+
+                // Set up a real-time listener
+                onSnapshot(reportsCollection, (snapshot) => {
+                    allReportsCache = snapshot.docs.map(doc => doc.data());
+                    console.log(`Fetched ${allReportsCache.length} reports.`);
+                    
+                    // Update views based on the current active tab
+                    const activeTabKey = document.querySelector('.tab-button.active').id.split('-')[1];
+                    if (activeTabKey === 'dashboard') {
+                        drawChoroplethMap();
+                    } else if (activeTabKey === 'data') {
+                        updateDataTable();
+                    }
+                });
+
+            } catch (error) {
+                console.error("Initialization failed:", error);
+                document.getElementById('map-container').innerHTML = '<div class="text-center p-8 bg-red-100 text-red-700">Could not load application. Please check console for errors.</div>';
+            }
+        }
+        main();
+
+    </script>
+</body>
+</html>
