@@ -62,8 +62,16 @@
                 <div>
                     <h2 class="text-lg font-bold text-slate-800" data-lang="tabSubmit">Submit a Report</h2>
                     <div class="space-y-4 mt-2">
+                        <div class="space-y-2">
+                            <label for="location-search" class="font-semibold text-sm" data-lang="searchLabel">Search for a Location:</label>
+                            <div class="flex space-x-2">
+                                <input type="text" id="location-search" placeholder="Address or Coordinates" class="border-slate-300 rounded-lg px-3 py-2 w-full text-sm" data-lang-placeholder="searchPlaceholder">
+                                <button id="search-btn" class="bg-slate-700 text-white px-4 rounded-lg hover:bg-slate-800" data-lang="goButton">Go</button>
+                            </div>
+                        </div>
+                        <hr class="border-slate-200">
                         <button id="enter-pin-mode" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors shadow-md" data-lang="placePinButton">
-                            Place Pin on Map
+                            Or Place Pin Manually
                         </button>
                         <div id="pin-mode-text" class="text-center text-indigo-600 font-semibold hidden" data-lang="placePinText">
                             Click on the map to place your pin.
@@ -181,6 +189,8 @@
         const adminLogoutBtn = document.getElementById('admin-logout');
         const downloadReportsBtn = document.getElementById('download-reports');
         const dataTableBody = document.querySelector('#data-table tbody');
+        const searchInput = document.getElementById('location-search');
+        const searchBtn = document.getElementById('search-btn');
         const langEn = document.getElementById('lang-en');
         const langEs = document.getElementById('lang-es');
         
@@ -189,9 +199,10 @@
                 appTitle: "Ice Breaker", appSubtitle: "Anonymous Incident Reporting",
                 dashboardSubtitle: "The map shows reported incidents for the selected timeframe.",
                 tabSubmit: "Submit a Report",
+                searchLabel: "Search for a Location:", searchPlaceholder: "Address or Coordinates", goButton: "Go",
                 timeframeLabel: "Timeframe:", timeframe24h: "24h", timeframe7d: "7d", timeframe30d: "30d", timeframeAll: "All",
                 loadingReports: "Loading reports...",
-                placePinButton: "Place Pin on Map", placePinText: "Click on the map to place your pin.",
+                placePinButton: "Or Place Pin Manually", placePinText: "Click on the map to place your pin.",
                 captchaLabel: "I am not a robot", submitButton: "Submit Report",
                 dataExplorerTitle: "Data Explorer",
                 downloadButton: "Download as TSV",
@@ -208,9 +219,10 @@
                 appTitle: "Ice Breaker", appSubtitle: "Reporte de Incidentes Anónimo",
                 dashboardSubtitle: "El mapa muestra incidentes reportados para el período de tiempo seleccionado.",
                 tabSubmit: "Enviar un Reporte",
+                searchLabel: "Buscar una Ubicación:", searchPlaceholder: "Dirección o Coordenadas", goButton: "Ir",
                 timeframeLabel: "Periodo:", timeframe24h: "24h", timeframe7d: "7d", timeframe30d: "30d", timeframeAll: "Todos",
                 loadingReports: "Cargando reportes...",
-                placePinButton: "Colocar Pin en el Mapa", placePinText: "Haga clic en el mapa para colocar su pin.",
+                placePinButton: "O Colocar Pin Manualmente", placePinText: "Haga clic en el mapa para colocar su pin.",
                 captchaLabel: "No soy un robot", submitButton: "Enviar Reporte",
                 dataExplorerTitle: "Explorador de Datos",
                 downloadButton: "Descargar como TSV",
@@ -231,6 +243,12 @@
                 const key = el.dataset.lang;
                 if (translations[lang][key]) {
                     el.textContent = translations[lang][key];
+                }
+            });
+            document.querySelectorAll('[data-lang-placeholder]').forEach(el => {
+                const key = el.dataset.langPlaceholder;
+                if (translations[lang][key]) {
+                    el.placeholder = translations[lang][key];
                 }
             });
             langEn.classList.toggle('active', lang === 'en');
@@ -317,7 +335,6 @@
             summaryDiv.innerHTML = tableHTML;
         }
 
-        // Single function to update all UI components based on filtered data
         function updateAllViews() {
             const filteredReports = getFilteredReports();
             drawSubmissionMapPins(filteredReports);
@@ -345,26 +362,33 @@
         function showFeedback(textKey, isError = false) {
             const lang = localStorage.getItem('iceCrusherLang') || 'en';
             feedbackDiv.textContent = translations[lang][textKey] || textKey;
-            feedbackDiv.className = `mt-4 text-center p-2 rounded-lg ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
+            feedbackDiv.className = `mt-2 text-center p-2 rounded-lg ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
         }
         
-        // --- 4. EVENT HANDLERS ---
-        function onMapClick(e) {
-            if (!isPinMode) return;
-            if (tempPin) submissionMap.removeLayer(tempPin);
+        function placePin(lat, lng) {
+            if (!usBounds.contains([lat, lng])) {
+                showFeedback("Location is outside the US.", true);
+                return;
+            }
+             if (tempPin) submissionMap.removeLayer(tempPin);
             
             const blueIcon = L.icon({
                 iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
                 shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
                 iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
             });
-            tempPinCoords = {lat: e.latlng.lat, lng: e.latlng.lng};
+            tempPinCoords = {lat, lng};
             tempPin = L.marker(tempPinCoords, { icon: blueIcon }).addTo(submissionMap).bindPopup('Your new report location.');
             
             isPinMode = false;
             document.getElementById('submission-map').classList.remove('crosshair-cursor');
             pinModeText.classList.add('hidden');
-            captcha.disabled = false;
+            updateSubmitButtonState();
+        }
+
+        function onMapClick(e) {
+            if (!isPinMode) return;
+            placePin(e.latlng.lat, e.latlng.lng);
         }
 
         function updateSubmitButtonState() {
@@ -486,6 +510,27 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        });
+
+        searchBtn.addEventListener('click', async () => {
+            const query = searchInput.value;
+            if (!query) return;
+            showFeedback("Searching...", false);
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&countrycodes=us&limit=1`);
+                const data = await response.json();
+                if (data && data.length > 0) {
+                    const { lat, lon } = data[0];
+                    const newLatLng = L.latLng(lat, lon);
+                    submissionMap.flyTo(newLatLng, 10);
+                    placePin(newLatLng.lat, newLatLng.lng);
+                    showFeedback("", false);
+                } else {
+                    showFeedback("Location not found", true);
+                }
+            } catch (error) {
+                showFeedback("Search failed", true);
+            }
         });
         
         langEn.addEventListener('click', () => setLanguage('en'));
